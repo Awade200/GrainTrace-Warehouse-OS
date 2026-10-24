@@ -152,3 +152,37 @@ window.millGPS=function(){
  },{enableHighAccuracy:true,timeout:20000,maximumAge:0});
 };
 })();
+/* Evidence recovery for pre-photo prototype records only. Records are marked retrospective. */
+(function(){
+'use strict';
+const oldDispatch=window.finishDispatch;
+let pendingValues=null,pendingBag=null;
+function findBag(bid){for(const d of state.deliveries){const b=d.bags.find(x=>x.id===bid);if(b)return {d,b};}return null;}
+window.finishDispatch=function(e){
+ e.preventDefault();const v=Object.fromEntries(new FormData(e.target));
+ for(const b of bags()){const weight=Number(v['stock_'+b.id]||0);
+  if(weight>0){const r=findBag(b.id);
+   if(r && !r.b.evidence?.processing){pendingValues=v;pendingBag=r;
+    modal('Missing processing photograph','<p class="note"><b>'+esc(b.id)+'</b> is older demo stock. It was recorded before mandatory stage photos were introduced.</p><p class="note">Attach an actual photograph of this bag for demonstration. The system will label it <b>retrospective evidence</b>, not a photo captured during the original processing.</p><label class="field">Photo of this stock<input id="gtLegacyPhoto" type="file" accept="image/*" capture="environment" required></label><div class="modalactions"><button class="btn alt" onclick="openDispatch()">Cancel</button><button class="btn" onclick="gtAttachLegacyProcessing()">Attach photo & continue</button></div>');
+    return;
+   }
+  }
+ }
+ return oldDispatch(e);
+};
+window.gtAttachLegacyProcessing=function(){
+ if(!pendingBag)return;const file=document.getElementById('gtLegacyPhoto')?.files?.[0];
+ if(!file)return alert('Select a photograph to continue.');
+ if(!file.type.startsWith('image/')||file.size>12000000)return alert('Select an image smaller than 12 MB.');
+ const reader=new FileReader();reader.onerror=()=>alert('Could not read the image.');
+ reader.onload=()=>{const img=new Image();img.onerror=()=>alert('Invalid image.');
+ img.onload=()=>{const canvas=document.createElement('canvas'),scale=Math.min(1,820/Math.max(img.width,img.height));
+ canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+ pendingBag.b.evidence={...(pendingBag.b.evidence||{}),processing:{data:canvas.toDataURL('image/jpeg',.65),capturedAt:new Date().toISOString(),retrospective:true,demoLocalOnly:true}};
+ event('Evidence','Retrospective processing photo attached: '+pendingBag.b.id);
+ const restore=pendingValues;pendingValues=null;pendingBag=null;closeModal();save();openDispatch();
+ const form=document.querySelector('#overlay form');
+ if(form)for(const [name,value] of Object.entries(restore)){const el=Array.from(form.elements).find(x=>x.name===name);if(el)el.value=value;}
+ };img.src=reader.result;};reader.readAsDataURL(file);
+};
+})();
