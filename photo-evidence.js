@@ -127,3 +127,28 @@ function enhanced(){
 }
 render=enhanced;render();
 })();
+/* Guided first-use path: GPS is requested only from an explicit user click. */
+(function(){
+'use strict';
+window.openReceive=function(){
+ const eligible=state.suppliers.filter(s=>s.status==='Approved'&&s.latitude!==undefined&&s.longitude!==undefined&&validCoords(Number(s.latitude),Number(s.longitude))&&s.evidence?.mill?.data);
+ if(!eligible.length){
+  modal('Before receiving PKS','<div class="insight"><b>No approved, photo-verified mill is ready yet.</b><p class="note">Register a mill, capture its GPS location, attach the required site photo and set its status to Approved. Then you can record bags at the gate.</p></div><div class="modalactions"><button class="btn alt" onclick="closeModal()">Close</button><button class="btn" onclick="closeModal();show(\'Suppliers\');openSupplier()">＋ Register a mill →</button></div>');
+  return;
+ }
+ modal('Gate · Receive PKS','<form onsubmit="receiveStep(event)"><div class="fields">'+select('Approved mill','supplierId',eligible.map(s=>[s.id,s.name]))+field('Product','product','text','Palm Kernel Shells (PKS)')+field('Gate receipt date','date','date',today())+field('Number of bags (1–100)','count','number','2')+'</div><div class="modalactions"><button class="btn">Weigh individual bags →</button></div></form>');
+};
+window.millGPS=function(){
+ if(!navigator.geolocation)return alert('GPS is not supported in this browser. Please enter verified coordinates instead.');
+ const button=document.querySelector('#millform button[onclick="millGPS()"]');
+ if(button){button.disabled=true;button.textContent='⌾ Requesting GPS…';}
+ navigator.geolocation.getCurrentPosition(p=>{
+  const a=document.getElementById('milllat'),b=document.getElementById('milllon');
+  if(a&&b){a.value=p.coords.latitude.toFixed(7);b.value=p.coords.longitude.toFixed(7);alert('GPS location captured. Now add the mill photograph and save.');}
+  if(button){button.disabled=false;button.textContent='⌾ Capture GPS';}
+ },e=>{
+  if(button){button.disabled=false;button.textContent='⌾ Capture GPS';}
+  alert('GPS could not be captured: '+e.message+'. Check Chrome site location permissions or enter verified coordinates.');
+ },{enableHighAccuracy:true,timeout:20000,maximumAge:0});
+};
+})();
