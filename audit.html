@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow">
+<title>GrainTrace · Independent Audit Report</title>
+<style>
+:root{font-family:Inter,system-ui,sans-serif;color:#eaf4ee;background:#0c1518}*{box-sizing:border-box}
+body{margin:0}.wrap{max-width:1050px;margin:auto;padding:28px 20px 70px}
+header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #314139;padding-bottom:20px}
+.brand{color:#b8ef83;font-size:22px;font-weight:800}.badge{border:1px solid #386348;color:#b8ef83;padding:8px 12px;border-radius:30px;font-size:12px}
+h1{font-size:clamp(24px,4vw,39px);margin:30px 0 5px}p,.muted{color:#94aba1;line-height:1.6}
+.card{background:#142329;border:1px solid #30413e;border-radius:16px;padding:23px;margin-top:20px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.stat{background:#1b3032;border-radius:12px;padding:16px}
+.num{font-size:28px;font-weight:800;color:#b8ef83;margin-top:7px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:13px 10px;border-bottom:1px solid #30413e;vertical-align:top}th{color:#9faeaa;font-size:12px}
+a{color:#b8ef83}button{background:#b8ef83;color:#132821;border:0;border-radius:9px;padding:11px 15px;font-weight:700;cursor:pointer}
+#alert{background:#422622;color:#ffc6ae;padding:14px;border-radius:12px;margin-top:22px;display:none}
+.docs{display:grid;gap:10px}footer{font-size:12px;color:#81928d;margin-top:30px}
+@media(max-width:640px){.stats{grid-template-columns:1fr}.tablewrap{overflow-x:auto}table{min-width:620px}header{gap:10px}}
+@media print{body{color:black;background:white}.card,.stat{color:black;background:white;border-color:#ddd}.num{color:#1c593b}button{display:none}}
+</style></head><body><div class="wrap">
+<header><div class="brand">◈ GrainTrace <span style="font-weight:400;color:#99a79f;font-size:14px">/ Audit portal</span></div><span class="badge">Read-only report</span></header>
+<div id="alert" role="alert"></div><div id="result"><h1>Verifying access…</h1><p>Checking the report link and its expiration.</p></div>
+<footer>This report shows recorded provenance, not a certification or independently verified EUDR compliance determination. This is a fictional demonstration dataset.</footer>
+</div><script>
+const ENDPOINT="https://yarrnuynycvlswexthhr.supabase.co/functions/v1/graintrace-audit";
+const result=document.getElementById("result"),alertBox=document.getElementById("alert");
+const token=new URLSearchParams(location.search).get("t")||"";
+function el(tag,text,parent,cls){const n=document.createElement(tag);if(text!==null)n.textContent=String(text);if(cls)n.className=cls;parent.appendChild(n);return n}
+function weight(n){return Number(n||0).toLocaleString("en-GB",{maximumFractionDigits:3})+" kg"}
+async function load(){
+try{
+if(!/^[a-f0-9]{64}$/.test(token))throw Error("The audit link is missing or invalid.");
+const r=await fetch(ENDPOINT+"?action=audit&token="+encodeURIComponent(token),{cache:"no-store",referrerPolicy:"no-referrer"});
+const d=await r.json();if(!r.ok)throw Error(d.error||"Unable to open report");
+result.replaceChildren();
+el("h1",d.dispatch.reference,result);
+el("p","Buyer: "+d.dispatch.buyer+" · Dispatched: "+new Date(d.dispatch.dispatched_at).toLocaleDateString("en-GB"),result);
+const stats=el("div",null,result,"stats");
+const mills=new Set(d.sources.map(s=>s.mill_id));
+for(const [label,value] of [["Dispatch weight",weight(d.dispatch.scale_kg)],["Contributing mills",mills.size],["Source bags",d.sources.length]]){const a=el("div",null,stats,"stat");el("div",label,a,"muted");el("div",value,a,"num")}
+const card=el("section",null,result,"card");el("h2","Source-to-dispatch provenance",card);
+const scroll=el("div",null,card,"tablewrap"),table=el("table",null,scroll),thead=el("thead",null,table),tr=el("tr",null,thead);
+for(const h of ["Mill / GPS","Gate receipt & bag","Initial weight","Cleaned weight","Cleaning loss","Dispatched"])el("th",h,tr);
+const body=el("tbody",null,table);
+let total=0;for(const s of d.sources){
+ const tr=el("tr",null,body),td=el("td",null,tr);
+ el("strong",s.mill,td);el("div",s.address,td,"muted");
+ const gps=el("a","GPS: "+s.latitude+", "+s.longitude,td);
+ gps.href="https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(s.latitude+","+s.longitude);gps.target="_blank";gps.rel="noopener noreferrer";
+ el("td",s.gate_receipt+" / "+s.bag,tr);el("td",weight(s.gate_kg),tr);el("td",weight(s.clean_kg),tr);el("td",weight(s.cleaning_loss_kg),tr);el("td",weight(s.dispatched_kg),tr);
+ total+=Number(s.dispatched_kg)}
+el("p","Source allocation: "+weight(total)+" · Outbound scale: "+weight(d.dispatch.scale_kg),card,"muted");
+if(Math.abs(total-Number(d.dispatch.scale_kg))>.001)el("p","Attention: Source allocation differs from outbound scale weight.",card);
+const docs=el("section",null,result,"card");el("h2","Permitted supporting documents",docs);
+if(!d.documents.length)el("p","No supporting documents have been released for auditor viewing.",docs);
+else {const container=el("div",null,docs,"docs");for(const doc of d.documents){const a=el("a",doc.label+" (temporary download)",container);a.href=doc.url;a.target="_blank";a.rel="noopener noreferrer"}el("p","Document download links expire after 60 seconds. Reload the auditor link to obtain fresh links.",docs,"muted")}
+const print=el("button","Print report / Save PDF",result);print.addEventListener("click",()=>window.print());
+}catch(e){result.replaceChildren();el("h1","Report unavailable",result);alertBox.style.display="block";alertBox.textContent=e.message||"Access denied";}
+}
+load();
+</script></body></html>
